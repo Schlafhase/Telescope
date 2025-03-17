@@ -59,9 +59,9 @@ public class QueryInputView : View
 		QueryField.Text = "No container selected";
 	}
 	
-	public void Enable()
+	public void Enable(string query = "")
 	{
 		QueryField.Enabled = true;
-		QueryField.Text = "";
+		QueryField.Text = query;
 	}
 }

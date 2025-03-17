@@ -16,15 +16,19 @@ public class MainView : Window
 
 	private DataTable _dt;
 	private TableView _resultsTable;
+	private ContextMenu _tableContextMenu;
+	private bool _updating;
 
 	private CosmosApiWrapper _cosmosApiWrapper;
+	private NavigatorBar _navigatorBar;
 	private AppSettings _appSettings;
 
 	private Dialog? _credentialConfigurationDialog;
 	private Dialog? _databaseSelectionDialog;
 	private Dialog? _containerSelectionDialog;
-	
-	private List<string> _columns = ["id", "UserName", "Type"];
+	private Dialog? _columnConfigurationDialog;
+
+	private List<string> _columns;
 
 	public MainView()
 	{
@@ -43,7 +47,9 @@ public class MainView : Window
 		}
 
 		_cosmosApiWrapper = new CosmosApiWrapper();
-		_cosmosApiWrapper.PageSize = _appSettings.PageSize ?? 25;
+		_cosmosApiWrapper.PageSize = _appSettings.Preferences.PageSize;
+
+		_columns = _appSettings.Columns;
 
 		try
 		{
@@ -79,9 +85,9 @@ public class MainView : Window
 				new MenuBarItem("_File",
 				[
 					new MenuItem("_Configure CosmosDB credentials", "",
-								 async () => await credentialConfigurationClick()),
-					new MenuItem("_Select Database", "", async () => await databaseSelectionClick()),
-					new MenuItem("_Select Container", "", async () => await containerSelectionClick()),
+								 async () => await openCredentialConfiguration()),
+					new MenuItem("_Select Database", "", async () => await openDatabaseSelection()),
+					new MenuItem("_Select Container", "", async () => await openContainerSelection()),
 					new MenuItem("_Quit", "", () => Application.RequestStop())
 				]),
 
@@ -96,16 +102,15 @@ public class MainView : Window
 			Width = Dim.Fill(),
 			Height = 1
 		};
-		
+
 		_dt = new DataTable();
-		_dt.Columns.Add("Id");
 
 		_resultsTable = new TableView
 		{
 			X = 0,
 			Y = Pos.Bottom(_queryInputView) + 1,
 			Width = Dim.Fill(),
-			Height = Dim.Fill(),
+			Height = Dim.Fill(1),
 			Table = _dt,
 			Style = new TableView.TableStyle
 			{
@@ -113,9 +118,54 @@ public class MainView : Window
 			}
 		};
 
-		_queryInputView.QueryField.Text = _appSettings.LastQuery;
-		updateQueryField();
-		Add(_menuBar, _queryInputView, _resultsTable);
+		_tableContextMenu = new ContextMenu
+		{
+			MenuItems = new MenuBarItem("",
+			[
+				new MenuItem("Edit columns", "", async () => await openColumnConfiguration()),
+			])
+		};
+
+		_resultsTable.MouseClick += e =>
+		{
+			if (!e.MouseEvent.Flags.HasFlag(MouseFlags.Button3Clicked))
+			{
+				return;
+			}
+
+			_tableContextMenu.Position = new Point(e.MouseEvent.X, e.MouseEvent.Y);
+			_tableContextMenu.Show();
+		};
+
+		_navigatorBar = new NavigatorBar
+		{
+			X = 0,
+			Y = Pos.Bottom(_resultsTable),
+			Width = Dim.Fill(),
+			Height = 1
+		};
+		_navigatorBar.PageChanged += async (page) =>
+		{
+			if (_updating)
+			{
+				return;
+			}
+
+			tableLoading();
+
+			if (page < _cosmosApiWrapper.Pages.Count)
+			{
+				updateTable();
+				return;
+			}
+
+			_navigatorBar.Pages += await _cosmosApiWrapper.LoadMore() ? 1 : 0;
+			updateTable();
+		};
+
+		updateQueryField(_appSettings.LastQuery);
+		updateTable();
+		Add(_menuBar, _queryInputView, _resultsTable, _navigatorBar);
 	}
 
 	private async Task executeQuery()
@@ -126,12 +176,19 @@ public class MainView : Window
 		}
 
 		_loading = true;
-		_dt.Rows.Clear();
-		_dt.Rows.Add("Loading");
+		_navigatorBar.SetPage(0);
+		_navigatorBar.Pages = 0;
+
+		_appSettings.LastQuery = _queryInputView.QueryField.Text.ToString();
+		await File.WriteAllTextAsync("appsettings.json", JsonSerializer.Serialize(_appSettings));
+
+		tableLoading();
 
 		try
 		{
-			await _cosmosApiWrapper.GetFirstPageByQueryAsync(_queryInputView.QueryField.Text.ToString());
+			bool morePages =
+				await _cosmosApiWrapper.GetFirstPageByQueryAsync(_queryInputView.QueryField.Text.ToString());
+			_navigatorBar.Pages = _cosmosApiWrapper.Pages.Count + (morePages ? 1 : 0);
 		}
 		catch (CosmosException e)
 		{
@@ -150,7 +207,7 @@ public class MainView : Window
 		}
 	}
 
-	private Task credentialConfigurationClick()
+	private Task openCredentialConfiguration()
 	{
 		_credentialConfigurationDialog = new Dialog("Configure Credentials")
 		{
@@ -226,7 +283,7 @@ public class MainView : Window
 		return Task.CompletedTask;
 	}
 
-	private async Task databaseSelectionClick()
+	private async Task openDatabaseSelection()
 	{
 		_databaseSelectionDialog = new Dialog("Select Database")
 		{
@@ -268,7 +325,7 @@ public class MainView : Window
 		Application.Run(_databaseSelectionDialog);
 	}
 
-	private async Task containerSelectionClick()
+	private async Task openContainerSelection()
 	{
 		_containerSelectionDialog = new Dialog("Select Container")
 		{
@@ -276,43 +333,149 @@ public class MainView : Window
 			Height = Dim.Percent(50)
 		};
 
-		Button cancelButton = new Button("Cancel");
+		Button cancelButton = new Button("Close");
 		cancelButton.Clicked += () => _containerSelectionDialog.RequestStop();
 		_containerSelectionDialog.AddButton(cancelButton);
 
-		try
-		{
-			List<ContainerProperties> containers = await _cosmosApiWrapper.ListContainers();
-
-			foreach (ContainerProperties container in containers)
-			{
-				Button button = new Button(container.Id)
-				{
-					Width = Dim.Fill()
-				};
-				button.Clicked += () =>
-				{
-					_appSettings.SelectedContainer = container.Id;
-					_cosmosApiWrapper.SelectContainer(container.Id);
-					File.WriteAllText("appsettings.json", JsonSerializer.Serialize(_appSettings));
-					updateTitle();
-					updateQueryField();
-					_containerSelectionDialog.RequestStop();
-				};
-
-				_containerSelectionDialog.Add(button);
-			}
-		}
-		catch (InvalidOperationException e)
-		{
-			_containerSelectionDialog.Text = e.Message;
-		}
 
 		Application.Run(_containerSelectionDialog);
 	}
 
+	private async Task openColumnConfiguration()
+	{
+		_columnConfigurationDialog = new Dialog("Edit Columns")
+		{
+			Width = Dim.Percent(50),
+			Height = Dim.Percent(50)
+		};
+
+		Button cancelButton = new Button("Close");
+		cancelButton.Clicked += () => _columnConfigurationDialog.RequestStop();
+
+		ListView listView = new ListView(_columns)
+		{
+			X = 0,
+			Y = 0,
+			Width = Dim.Fill(),
+			Height = Dim.Fill(1)
+		};
+
+		listView.OpenSelectedItem += (e) =>
+		{
+			TextField columnNameField = new TextField(e.Value.ToString())
+			{
+				X = 1,
+				Y = 1,
+				Width = Dim.Fill(),
+			};
+
+			Dialog columEditDialog = new Dialog("Edit Column")
+			{
+				Width = Dim.Percent(25),
+				Height = 6
+			};
+
+			Button saveButton = new Button("Save");
+			saveButton.Clicked += () =>
+			{
+				if (_columns.SkipWhile((c, i) => i == e.Item || c != columnNameField.Text.ToString()).Any())
+				{
+					MessageBox.ErrorQuery("Error", "Column already exists.", "Ok");
+					return;
+				}
+
+				_columns[e.Item] = columnNameField.Text.ToString();
+				_appSettings.Columns = _columns;
+				updateTable();
+				File.WriteAllText("appsettings.json", JsonSerializer.Serialize(_appSettings));
+				columEditDialog.RequestStop();
+			};
+
+			columEditDialog.Add(columnNameField);
+			columEditDialog.AddButton(saveButton);
+			Application.Run(columEditDialog);
+		};
+
+		Button addButton = new Button("Add");
+		addButton.Clicked += () =>
+		{
+			_columns.Add("New Column " + _columns.Count(c => c.StartsWith("New Column ")));
+			listView.SelectedItem = _columns.Count - 1;
+			listView.OnOpenSelectedItem();
+		};
+
+		Button removeButton = new Button("Remove");
+		removeButton.Clicked += () =>
+		{
+			_columns.RemoveAt(listView.SelectedItem);
+			updateTable();
+		};
+
+		Button removeAllButton = new Button("Remove All");
+		removeAllButton.Clicked += () =>
+		{
+			_columns.Clear();
+			updateTable();
+		};
+
+		Button moveUpButton = new Button("^");
+		moveUpButton.Clicked += () =>
+		{
+			if (listView.SelectedItem == 0)
+			{
+				return;
+			}
+
+			(_columns[listView.SelectedItem], _columns[listView.SelectedItem - 1]) =
+				(_columns[listView.SelectedItem - 1], _columns[listView.SelectedItem]);
+
+			updateTable();
+
+			listView.SelectedItem--;
+			listView.SetFocus();
+			updateTable();
+		};
+
+		Button moveDownButton = new Button("V");
+		moveDownButton.Clicked += () =>
+		{
+			if (listView.SelectedItem == _columns.Count - 1)
+			{
+				return;
+			}
+
+			(_columns[listView.SelectedItem], _columns[listView.SelectedItem + 1]) =
+				(_columns[listView.SelectedItem + 1], _columns[listView.SelectedItem]);
+			listView.SelectedItem++;
+			listView.SetFocus();
+			updateTable();
+		};
+
+		_columnConfigurationDialog.Add(listView);
+		_columnConfigurationDialog.AddButton(cancelButton);
+		_columnConfigurationDialog.AddButton(addButton);
+		_columnConfigurationDialog.AddButton(removeButton);
+		_columnConfigurationDialog.AddButton(removeAllButton);
+		_columnConfigurationDialog.AddButton(moveUpButton);
+		_columnConfigurationDialog.AddButton(moveDownButton);
+		Application.Run(_columnConfigurationDialog);
+	}
+
+	private void tableLoading()
+	{
+		_dt.Rows.Clear();
+
+		if (_dt.Columns.Count == 0)
+		{
+			return;
+		}
+
+		_dt.Rows.Add("Loading");
+	}
+
 	private void updateTable()
 	{
+		_updating = true;
 		_dt.Rows.Clear();
 		_dt.Columns.Clear();
 
@@ -320,18 +483,20 @@ public class MainView : Window
 		{
 			_dt.Columns.Add(column);
 		}
-		
-		if (_cosmosApiWrapper.Pages.Count == 0)
+
+		if (_cosmosApiWrapper.Pages.Count <= _navigatorBar.CurrentPage)
 		{
+			_navigatorBar.SetPage(_cosmosApiWrapper.Pages.Count - 1);
+
 			_dt.AcceptChanges();
 			_resultsTable.Update();
 			return;
 		}
 
-		foreach (dynamic entity in _cosmosApiWrapper.Pages[0])
+		foreach (dynamic entity in _cosmosApiWrapper.Pages[_navigatorBar.CurrentPage])
 		{
 			DataRow row = _dt.NewRow();
-			
+
 			foreach (string column in _columns)
 			{
 				try
@@ -343,15 +508,17 @@ public class MainView : Window
 					row[column] = "";
 				}
 			}
-			
+
 			_dt.Rows.Add(row);
 		}
 
+		_navigatorBar.UpdateButtons();
 		_dt.AcceptChanges();
 		_resultsTable.Update();
+		_updating = false;
 	}
 
-	private void updateQueryField()
+	private void updateQueryField(string query = "")
 	{
 		if (_appSettings.SelectedContainer is null)
 		{
@@ -359,7 +526,7 @@ public class MainView : Window
 		}
 		else
 		{
-			_queryInputView.Enable();
+			_queryInputView.Enable(query);
 		}
 	}
 

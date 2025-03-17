@@ -11,12 +11,12 @@ public sealed class CosmosApiWrapper : IDisposable
 	private Container? _container;
 
 	private string? _continuationToken;
-	public int PageSize = 25;
+	public int PageSize;
 	private string _query = "";
 
-	public readonly List<List<dynamic>> Pages = [];
+	public List<List<dynamic>> Pages = [];
 	
-	public void SetCredentials(string endpoint, string key)
+	public void SetCredentials(string endpoint, string key, int maxRetry = 100, TimeSpan? maxRetryWaitTime = null)
 	{
 		_client?.Dispose();
 		_client = new CosmosClient(endpoint, key)
@@ -24,8 +24,8 @@ public sealed class CosmosApiWrapper : IDisposable
 			ClientOptions =
 			{
 				AllowBulkExecution = true,
-				MaxRetryAttemptsOnRateLimitedRequests = 100,
-				MaxRetryWaitTimeOnRateLimitedRequests = TimeSpan.FromMinutes(1)
+				MaxRetryAttemptsOnRateLimitedRequests = maxRetry,
+				MaxRetryWaitTimeOnRateLimitedRequests = maxRetryWaitTime ?? TimeSpan.FromMinutes(1)
 			}
 		};
 	}
@@ -150,11 +150,11 @@ public sealed class CosmosApiWrapper : IDisposable
 		}
 	}
 
-	public async Task GetFirstPageByQueryAsync(string q)
+	public async Task<bool> GetFirstPageByQueryAsync(string q)
 	{
 		_query = q;
-		Pages.Clear();
-		QueryDefinition query = new(q);
+		Pages = [];
+		QueryDefinition query = new(_query);
 
 		List<dynamic> results = [];
 
@@ -167,29 +167,31 @@ public sealed class CosmosApiWrapper : IDisposable
 
 		_continuationToken = null;
 
-		// Execute query and get 1 item in the results. Then, get a continuation token to resume later
 		while (resultSetIterator.HasMoreResults)
 		{
+			// TODO: ORDER BY throws NullReferenceException
 			FeedResponse<dynamic> response = await resultSetIterator.ReadNextAsync();
 
 			results.AddRange(response);
 
-			// Get continuation token once we've gotten > 0 results. 
-			if (response.Count > 0)
+			if (response.Count <= 0)
 			{
-				_continuationToken = response.ContinuationToken;
-				break;
+				continue;
 			}
+
+			_continuationToken = response.ContinuationToken;
+			break;
 		}
 
 		Pages.Add(results);
+		return _continuationToken is not null;
 	}
 
-	public async Task LoadMore()
+	public async Task<bool> LoadMore()
 	{
 		if (_continuationToken is null)
 		{
-			return;
+			return false;
 		}
 
 		List<dynamic> results = [];
@@ -209,14 +211,17 @@ public sealed class CosmosApiWrapper : IDisposable
 
 			results.AddRange(response);
 
-			if (response.Count > 0)
+			if (response.Count <= 0)
 			{
-				_continuationToken = response.ContinuationToken;
-				break;
+				continue;
 			}
+
+			_continuationToken = response.ContinuationToken;
+			break;
 		}
 
 		Pages.Add(results);
+		return _continuationToken is not null;
 	}
 	
 
