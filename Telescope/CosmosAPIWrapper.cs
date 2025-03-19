@@ -32,21 +32,18 @@ public sealed class CosmosApiWrapper : IDisposable
 
 	public async Task<bool> VerifyConnection()
 	{
-		if (_client is null)
-		{
-			return false;
-		}
+		return _client is not null;
 
-		try
-		{
-			FeedIterator<object>? iterator = _client.GetDatabaseQueryIterator<object>();
-			await iterator.ReadNextAsync();
-			return true;
-		}
-		catch
-		{
-			return false;
-		}
+		// try
+		// {
+		// 	FeedIterator<object>? iterator = _client.GetDatabaseQueryIterator<object>();
+		// 	await iterator.ReadNextAsync();
+		// 	return true;
+		// }
+		// catch
+		// {
+		// 	return false;
+		// }
 	}
 
 	public async Task<List<DatabaseProperties>> ListDatabases()
@@ -106,6 +103,12 @@ public sealed class CosmosApiWrapper : IDisposable
 		}
 
 		_container = _database.GetContainer(containerId);
+	}
+
+	public void UnselectDatabase()
+	{
+		_database = null;
+		_container = null;
 	}
 
 	public async Task CreateItemAsync<T>(T item) where T : ICosmosObject

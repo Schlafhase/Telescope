@@ -9,8 +9,6 @@ public partial class MainView
 	
 	private async Task openColumnConfiguration()
 	{
-		// TODO: Confirm with Enter
-		
 		_columnConfigurationDialog = new Dialog("Edit Columns")
 		{
 			Width = Dim.Percent(50),
@@ -66,9 +64,18 @@ public partial class MainView
 				File.WriteAllText("appsettings.json", JsonSerializer.Serialize(_appSettings));
 				columEditDialog.RequestStop();
 			};
+			
+			columnNameField.KeyUp += (e) =>
+			{
+				if (e.KeyEvent.Key == Key.Enter)
+				{
+					saveButton.OnClicked();
+				}
+			};
 
 			columEditDialog.Add(columnNameField);
 			columEditDialog.AddButton(saveButton);
+
 			Application.Run(columEditDialog);
 		};
 		
@@ -134,6 +141,7 @@ public partial class MainView
 		_columnConfigurationDialog.AddButton(removeAllButton);
 		_columnConfigurationDialog.AddButton(moveUpButton);
 		_columnConfigurationDialog.AddButton(moveDownButton);
+		
 		Application.Run(_columnConfigurationDialog);
 	}
 }

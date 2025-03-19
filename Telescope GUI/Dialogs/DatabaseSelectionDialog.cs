@@ -7,47 +7,65 @@ namespace Telescope_GUI;
 public partial class MainView
 {
 	private Dialog? _databaseSelectionDialog;
-	
+
 	private async Task openDatabaseSelection()
 	{
 		_databaseSelectionDialog = new Dialog("Select Database")
 		{
-			Width = Dim.Percent(50),
+			Width = Dim.Percent(25),
 			Height = Dim.Percent(50)
 		};
 
 		Button cancelButton = new Button("Cancel");
 		cancelButton.Clicked += () => _databaseSelectionDialog.RequestStop();
 		_databaseSelectionDialog.AddButton(cancelButton);
+		_databaseSelectionDialog.Text = "Loading Databases... (If this takes too long, check your credentials)";
+
 
 		// TODO: Use ListView
-		try
-		{
-			List<DatabaseProperties> databases = await _cosmosApiWrapper.ListDatabases();
 
-			foreach (DatabaseProperties database in databases)
+		_databaseSelectionDialog.Initialized += new EventHandler(async (_, _) =>
+		{
 			{
-				Button button = new Button(database.Id)
+				try
 				{
-					Width = Dim.Fill()
-				};
-				button.Clicked += () =>
+					List<DatabaseProperties> databases = await _cosmosApiWrapper.ListDatabases();
+
+					ListView listView = new ListView(databases.Select(d => d.Id).ToList())
+					{
+						X = 0,
+						Y = 0,
+						Width = Dim.Fill(),
+						Height = Dim.Fill(1)
+					};
+
+					listView.OpenSelectedItem += async (e) =>
+					{
+						_appSettings.SelectedDatabase = e.Value.ToString();
+						_cosmosApiWrapper.SelectDatabase(e.Value.ToString());
+						updateTitle();
+						await File.WriteAllTextAsync("appsettings.json", JsonSerializer.Serialize(_appSettings));
+						_databaseSelectionDialog.RequestStop();
+					};
+
+					_databaseSelectionDialog.Text = "";
+					_databaseSelectionDialog.Add(listView);
+				}
+				catch (InvalidOperationException e)
 				{
-					_appSettings.SelectedDatabase = database.Id;
-					_cosmosApiWrapper.SelectDatabase(database.Id);
-					File.WriteAllText("appsettings.json", JsonSerializer.Serialize(_appSettings));
-					updateTitle();
+					MessageBox.ErrorQuery("Error", e.Message, "Ok");
 					_databaseSelectionDialog.RequestStop();
-				};
-
-				_databaseSelectionDialog.Add(button);
+				}
+				catch (CosmosException e)
+				{
+					MessageBox.ErrorQuery("CosmosException",
+										  "A CosmosException was thrown. Did you enter the correct credentials?\n" +
+										  e.Message, "Ok");
+					_databaseSelectionDialog.RequestStop();
+				}
 			}
-		}
-		catch (InvalidOperationException e)
-		{
-			_databaseSelectionDialog.Text = e.Message;
-		}
-
+		});
+		
 		Application.Run(_databaseSelectionDialog);
 	}
 }

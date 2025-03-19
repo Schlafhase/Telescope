@@ -12,7 +12,7 @@ public partial class  MainView
 	{
 		_containerSelectionDialog = new Dialog("Select Container")
 		{
-			Width = Dim.Percent(50),
+			Width = Dim.Percent(25),
 			Height = Dim.Percent(50)
 		};
 

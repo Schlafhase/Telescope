@@ -32,6 +32,8 @@ public partial class MainView : Window
 
 	private void initializeComponent()
 	{
+		#region Load settings
+
 		try
 		{
 			_appSettings = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText("appsettings.json"));
@@ -70,6 +72,10 @@ public partial class MainView : Window
 
 		updateTitle();
 
+		#endregion
+
+		#region Components
+
 		Width = Dim.Fill();
 		Height = Dim.Fill();
 
@@ -79,14 +85,13 @@ public partial class MainView : Window
 			[
 				new MenuBarItem("_File",
 				[
-					new MenuItem("_Configure CosmosDB credentials", "",
-								 async () => await openCredentialConfiguration()),
+					new MenuItem("_Configure CosmosDB credentials", "", () => openCredentialConfiguration()),
 					new MenuItem("_Select Database", "", async () => await openDatabaseSelection()),
 					new MenuItem("_Select Container", "", async () => await openContainerSelection()),
 					new MenuItem("_Quit", "", () => Application.RequestStop())
 				]),
 
-				new MenuBarItem("_Preferences", Array.Empty<MenuItem>())
+				// new MenuBarItem("_Preferences", Array.Empty<MenuItem>()) TODO: Preferences
 			]
 		};
 
@@ -161,6 +166,8 @@ public partial class MainView : Window
 		updateQueryField(_appSettings.LastQuery);
 		updateTable();
 		Add(_menuBar, _queryInputView, _resultsTable, _navigatorBar);
+
+		#endregion
 	}
 
 	private async Task executeQuery()

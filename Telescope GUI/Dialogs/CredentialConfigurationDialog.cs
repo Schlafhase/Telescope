@@ -11,8 +11,8 @@ public partial class MainView
 	{
 		_credentialConfigurationDialog = new Dialog("Configure Credentials")
 		{
-			Width = Dim.Percent(50),
-			Height = Dim.Percent(50)
+			Width = Dim.Percent(25),
+			Height = 10
 		};
 
 		Label accountEndpointLabel = new Label("Account Endpoint:")
@@ -43,7 +43,8 @@ public partial class MainView
 		cancelButton.Clicked += () => _credentialConfigurationDialog.RequestStop();
 
 		Button saveButton = new Button("Save");
-		saveButton.Clicked += async () =>
+
+		async Task stop()
 		{
 			try
 			{
@@ -59,6 +60,11 @@ public partial class MainView
 				MessageBox.ErrorQuery("Error", "Invalid URI format.", "Ok");
 				return;
 			}
+			catch (FormatException)
+			{
+				MessageBox.ErrorQuery("Error", "Your key is not a valid Base-64 string", "Ok");
+				return;
+			}
 
 			if (!await _cosmosApiWrapper.VerifyConnection())
 			{
@@ -68,9 +74,21 @@ public partial class MainView
 
 			_appSettings.AccountEndpoint = accountEndpointField.Text.ToString();
 			_appSettings.AccountKey = accountKeyField.Text.ToString();
+			
+			_cosmosApiWrapper.UnselectDatabase();
+			_appSettings.SelectedDatabase = null;
+			_appSettings.SelectedContainer = null;
+			
+			updateTitle();
+			updateQueryField();
 			await File.WriteAllTextAsync("appsettings.json", JsonSerializer.Serialize(_appSettings));
-
+			
 			_credentialConfigurationDialog.RequestStop();
+		}
+		
+		saveButton.Clicked += async () =>
+		{
+			await stop();
 		};
 
 		_credentialConfigurationDialog.Add(accountEndpointLabel, accountEndpointField, accountKeyLabel,
@@ -78,7 +96,7 @@ public partial class MainView
 
 		_credentialConfigurationDialog.AddButton(cancelButton);
 		_credentialConfigurationDialog.AddButton(saveButton);
-
+		
 		Application.Run(_credentialConfigurationDialog);
 		return Task.CompletedTask;
 	}

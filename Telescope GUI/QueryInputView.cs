@@ -21,7 +21,7 @@ public class QueryInputView : View
 			Width = Dim.Fill(11)
 		};
 		
-		QueryField.KeyDown += (KeyEventEventArgs e) =>
+		QueryField.KeyDown += e =>
 		{
 			if (e.KeyEvent.Key == Key.Enter)
 			{
@@ -31,11 +31,13 @@ public class QueryInputView : View
 		
 		QueryField.KeyUp += async (KeyEventEventArgs e) =>
 		{
-			if (e.KeyEvent.Key == Key.Enter && _enterDown)
+			if (e.KeyEvent.Key != Key.Enter || !_enterDown)
 			{
-				_enterDown = false;
-				await executeClick();
+				return;
 			}
+
+			_enterDown = false;
+			await executeClick();
 		};
 		
 		Button _executeButton = new Button
