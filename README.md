@@ -16,7 +16,7 @@ The UI is built using [Terminal.Gui](https://github.com/gui-cs/Terminal.Gui)
 - Bulk Update
 
 ## How to use
-- Download the latest release
+- Download the [latest release](https://github.com/Schlafhase/Telescope/releases)
 - In the application, enter your CosmosDB Credentials by clicking File>Configure CosmosDB credentials
 - Click File>Select Database and select the database you want to view
 - Click File>Select Container and select the container you want to view
