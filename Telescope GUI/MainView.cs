@@ -2,6 +2,7 @@
 using System.Text.Json;
 using Microsoft.Azure.Cosmos;
 using Microsoft.CSharp.RuntimeBinder;
+using Telescope_GUI.Components;
 using Telescope;
 using Terminal.Gui;
 
@@ -27,10 +28,10 @@ public partial class MainView : Window
 
 	public MainView()
 	{
-		initializeComponent();
+		initialiseComponent();
 	}
 
-	private void initializeComponent()
+	private void initialiseComponent()
 	{
 		#region Load settings
 
@@ -103,12 +104,14 @@ public partial class MainView : Window
 			Height = 1
 		};
 
+		initialiseActionRow();
+
 		_dt = new DataTable();
 
 		_resultsTable = new TableView
 		{
 			X = 0,
-			Y = Pos.Bottom(_queryInputView) + 1,
+			Y = Pos.Bottom(_deleteButton),
 			Width = Dim.Fill(),
 			Height = Dim.Fill(1),
 			Table = _dt,
@@ -165,7 +168,7 @@ public partial class MainView : Window
 
 		updateQueryField(_appSettings.LastQuery);
 		updateTable();
-		Add(_menuBar, _queryInputView, _resultsTable, _navigatorBar);
+		Add(_menuBar, _queryInputView, _deleteButton, _deleteAllButton, _resultsTable, _navigatorBar);
 
 		#endregion
 	}

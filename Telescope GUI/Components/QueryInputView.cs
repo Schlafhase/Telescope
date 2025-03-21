@@ -1,6 +1,6 @@
 ﻿using Terminal.Gui;
 
-namespace Telescope_GUI;
+namespace Telescope_GUI.Components;
 
 public class QueryInputView : View
 {

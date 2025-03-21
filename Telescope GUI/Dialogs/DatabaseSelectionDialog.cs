@@ -19,19 +19,19 @@ public partial class MainView
 		Button cancelButton = new Button("Cancel");
 		cancelButton.Clicked += () => _databaseSelectionDialog.RequestStop();
 		_databaseSelectionDialog.AddButton(cancelButton);
+
+		ListView listView;
+
 		_databaseSelectionDialog.Text = "Loading Databases... (If this takes too long, check your credentials)";
 
-
-		// TODO: Use ListView
-
-		_databaseSelectionDialog.Initialized += new EventHandler(async (_, _) =>
+		_databaseSelectionDialog.Initialized += async (_, _) =>
 		{
 			{
 				try
 				{
 					List<DatabaseProperties> databases = await _cosmosApiWrapper.ListDatabases();
 
-					ListView listView = new ListView(databases.Select(d => d.Id).ToList())
+					listView = new ListView(databases.Select(d => d.Id).ToList())
 					{
 						X = 0,
 						Y = 0,
@@ -48,8 +48,12 @@ public partial class MainView
 						_databaseSelectionDialog.RequestStop();
 					};
 
+					Button selectButton = new Button("Select");
+					selectButton.Clicked += () => listView.OnOpenSelectedItem();
+
 					_databaseSelectionDialog.Text = "";
 					_databaseSelectionDialog.Add(listView);
+					_databaseSelectionDialog.AddButton(selectButton);
 				}
 				catch (InvalidOperationException e)
 				{
@@ -63,9 +67,14 @@ public partial class MainView
 										  e.Message, "Ok");
 					_databaseSelectionDialog.RequestStop();
 				}
+				catch (HttpRequestException e)
+				{
+					MessageBox.ErrorQuery("HttpRequestException",
+										  "The target server actively refused to connect. If you're using the emulator, make sure it's running and you have imported your container's the TLS/SSL certificate.", "Ok");
+				}
 			}
-		});
-		
+		};
+
 		Application.Run(_databaseSelectionDialog);
 	}
 }

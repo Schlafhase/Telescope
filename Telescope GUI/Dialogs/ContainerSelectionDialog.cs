@@ -16,42 +16,61 @@ public partial class  MainView
 			Height = Dim.Percent(50)
 		};
 
-		Button cancelButton = new Button("Close");
+		Button cancelButton = new Button("Cancel");
 		cancelButton.Clicked += () => _containerSelectionDialog.RequestStop();
 		_containerSelectionDialog.AddButton(cancelButton);
 
-		List<ContainerProperties> containers;
+		ListView listView;
 		
-		try
+		_containerSelectionDialog.Text = "Loading Containers...";
+		
+		_containerSelectionDialog.Initialized += async (_, _) =>
 		{
-			containers = await _cosmosApiWrapper.ListContainers();
-		}
-		catch (InvalidOperationException e)
-		{
-			MessageBox.ErrorQuery("Error", e.Message, "Ok");
-			return;
-		}
+			{
+				try
+				{
+					List<ContainerProperties> containers = await _cosmosApiWrapper.ListContainers();
+					
+					listView = new ListView(containers.Select(d => d.Id).ToList())
+					{
+						X = 0,
+						Y = 0,
+						Width = Dim.Fill(),
+						Height = Dim.Fill(1)
+					};
 
-		ListView listView = new ListView(containers.Select(c => c.Id).ToList())
-		{
-			X = 0,
-			Y = 0,
-			Width = Dim.Fill(),
-			Height = Dim.Fill(1)
+					listView.OpenSelectedItem += async (e) =>
+					{
+						_appSettings.SelectedContainer = e.Value.ToString();
+						_cosmosApiWrapper.SelectContainer(e.Value.ToString());
+						updateTitle();
+						updateQueryField();
+						await File.WriteAllTextAsync("appsettings.json", JsonSerializer.Serialize(_appSettings));
+						_containerSelectionDialog.RequestStop();
+					};
+					
+					Button selectButton = new Button("Select");
+					selectButton.Clicked += () => listView.OnOpenSelectedItem();
+
+					_containerSelectionDialog.Text = "";
+					_containerSelectionDialog.Add(listView);
+					_containerSelectionDialog.AddButton(selectButton);
+				}
+				catch (InvalidOperationException e)
+				{
+					MessageBox.ErrorQuery("Error", e.Message, "Ok");
+					_containerSelectionDialog.RequestStop();
+				}
+				catch (CosmosException e)
+				{
+					MessageBox.ErrorQuery("CosmosException",
+										  "A CosmosException was thrown.\n" +
+										  e.Message, "Ok");
+					_containerSelectionDialog.RequestStop();
+				}
+			}
 		};
 		
-		listView.OpenSelectedItem += async (e) =>
-		{
-			_appSettings.SelectedContainer = e.Value.ToString();
-			_cosmosApiWrapper.SelectContainer(e.Value.ToString());
-			updateTitle();
-			updateQueryField();
-			await File.WriteAllTextAsync("appsettings.json", JsonSerializer.Serialize(_appSettings));
-			_containerSelectionDialog.RequestStop();
-		};
-
-		// TODO: Add select Button
-		_containerSelectionDialog.Add(listView);
 		Application.Run(_containerSelectionDialog);
 	}
 }
