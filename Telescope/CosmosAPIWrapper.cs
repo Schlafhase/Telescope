@@ -226,6 +226,22 @@ public sealed class CosmosApiWrapper : IDisposable
 		Pages.Add(results);
 		return _continuationToken is not null;
 	}
+
+	public async Task BulkDeleteAsync(string query)
+	{
+		QueryDefinition queryDefinition = new(query);
+		using FeedIterator<dynamic> resultSetIterator = _container.GetItemQueryIterator<dynamic>(queryDefinition);
+		
+		while (resultSetIterator.HasMoreResults)
+		{
+			FeedResponse<dynamic> response = await resultSetIterator.ReadNextAsync();
+
+			foreach (dynamic item in response)
+			{
+				await _container.DeleteItemAsync<dynamic>(item.id, new PartitionKey(item.id));
+			}
+		}
+	}
 	
 
 	public void Dispose()
