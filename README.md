@@ -2,7 +2,7 @@
 Telescope is a tool that allows you to view (and in the future, also modify) entities in a CosmosDB.
 It displays entities in a table, and allows the user to configure the displayed columns.
 
-![img.png](img.png)
+![telescope.png](telescope.png)
 
 The UI is built using [Terminal.Gui](https://github.com/gui-cs/Terminal.Gui)
 
